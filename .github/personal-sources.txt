@@ -1,0 +1,2 @@
+# One maintained extension per line, relative to src/.
+zh/jinmantiantang
