@@ -11,7 +11,10 @@ const val ADULT_PREF = "ADULT"
 const val USERNAME_PREF = "USERNAME"
 const val PASSWORD_PREF = "PASSWORD"
 
-fun getPreferencesInternal(context: Context, preferences: SharedPreferences) = arrayOf(
+fun getPreferencesInternal(
+    context: Context,
+    preferences: SharedPreferences,
+) = arrayOf(
     EditTextPreference(context).apply {
         key = USERNAME_PREF
         title = "用戶名稱 / 電郵"

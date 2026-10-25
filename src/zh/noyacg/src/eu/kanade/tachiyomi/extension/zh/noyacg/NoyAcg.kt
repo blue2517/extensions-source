@@ -37,7 +37,6 @@ import java.io.IOException
 abstract class NoyAcg :
     KeiSource(),
     ConfigurableSource {
-
     private val pref by getPreferencesLazy()
     private val imgBaseUrl get() = baseUrl.replace("api", "img")
     private val loginLock = Any()
@@ -91,14 +90,18 @@ abstract class NoyAcg :
             throw IOException("請在擴充套件設定中輸入帳號與密碼，或在 WebView 中登入")
         }
 
-        val body = FormBody.Builder()
-            .add("user", username)
-            .add("pass", password)
-            .build()
-        val loginHeaders = headers.newBuilder()
-            .set("Origin", WEB_BASE_URL)
-            .set("Referer", "$WEB_BASE_URL/")
-            .build()
+        val body =
+            FormBody
+                .Builder()
+                .add("user", username)
+                .add("pass", password)
+                .build()
+        val loginHeaders =
+            headers
+                .newBuilder()
+                .set("Origin", WEB_BASE_URL)
+                .set("Referer", "$WEB_BASE_URL/")
+                .build()
         val request = POST("$WEB_BASE_URL/api/login", loginHeaders, body)
         network.client.newCall(request).execute().use { response ->
             val status = response.parseAs<LoginResponseDto>().status
@@ -116,7 +119,12 @@ abstract class NoyAcg :
         val book = jsonObject.getObject("book")
         val info = book["info"]!!.parseAs<MangaDto>()
         val recommend = book["recommend"]!!.parseAs<List<RecommendMangaDto>>()
-        val categories = jsonObject["chapters"]?.obj?.get("categories")?.array?.map { it.parseAs<CategoryDto>() } ?: emptyList()
+        val categories =
+            jsonObject["chapters"]
+                ?.obj
+                ?.get("categories")
+                ?.array
+                ?.map { it.parseAs<CategoryDto>() } ?: emptyList()
         val chaptersMap = mutableMapOf<Int, List<ChapterDto>>()
         jsonObject["chapters"]?.obj?.get("data")?.obj?.forEach { (key, value) ->
             key.toIntOrNull()?.let { categoryId -> chaptersMap[categoryId] = value.array.map { it.parseAs<ChapterDto>() } }
@@ -125,7 +133,10 @@ abstract class NoyAcg :
         return MangaDetailDto(status, info, recommend, chapters)
     }
 
-    private fun mangaPageParse(response: Response, page: Int): MangasPage {
+    private fun mangaPageParse(
+        response: Response,
+        page: Int,
+    ): MangasPage {
         val result = response.parseAs<ListingPageDto>()
         val mangas = result.data.map { it.toSManga(imgBaseUrl) }
         return MangasPage(mangas, page * LISTING_PAGE_SIZE < result.count)
@@ -154,8 +165,17 @@ abstract class NoyAcg :
 
     override fun getFilterList(data: JsonElement?) = buildFilterList()
 
-    override suspend fun getSearchMangaList(page: Int, query: String, filters: FilterList): MangasPage {
-        val body = FormBody.Builder().addEncoded("value", query).addEncoded("page", page.toString()).addEncoded("type", "book")
+    override suspend fun getSearchMangaList(
+        page: Int,
+        query: String,
+        filters: FilterList,
+    ): MangasPage {
+        val body =
+            FormBody
+                .Builder()
+                .addEncoded("value", query)
+                .addEncoded("page", page.toString())
+                .addEncoded("type", "book")
         filters.filterIsInstance<SearchFilter>().forEach { it.addTo(body) }
         val response = client.post("$baseUrl/api/v4/search/fetch", body.build())
         return mangaPageParse(response, page)
@@ -183,31 +203,35 @@ abstract class NoyAcg :
 
         val sManga = comic.book.toSManga(imgBaseUrl)
 
-        val mangaId = response.request.url.pathSegments.last()
-        val sChapters = if (comic.chapters.isEmpty()) {
-            listOf(
-                SChapter.create().apply {
-                    url = mangaId
-                    name = "單章節（${comic.book.len}P）"
-                    date_upload = comic.book.time * 1000
-                    chapter_number = 0F
-                    memo = buildJsonObject { put("size", comic.book.len) }
-                },
-            )
-        } else {
-            comic.chapters.flatMap { category ->
-                category.value.map {
+        val mangaId =
+            response.request.url.pathSegments
+                .last()
+        val sChapters =
+            if (comic.chapters.isEmpty()) {
+                listOf(
                     SChapter.create().apply {
-                        url = "$mangaId/${it.id}"
-                        name = "${it.name}（${it.count}P）"
-                        date_upload = it.createdAt * 1000
-                        // chapter_number = it.sort.toFloat()
-                        scanlator = category.key
-                        memo = buildJsonObject { put("size", it.count) }
-                    }
-                }.reversed()
+                        url = mangaId
+                        name = "單章節（${comic.book.len}P）"
+                        date_upload = comic.book.time * 1000
+                        chapter_number = 0F
+                        memo = buildJsonObject { put("size", comic.book.len) }
+                    },
+                )
+            } else {
+                comic.chapters.flatMap { category ->
+                    category.value
+                        .map {
+                            SChapter.create().apply {
+                                url = "$mangaId/${it.id}"
+                                name = "${it.name}（${it.count}P）"
+                                date_upload = it.createdAt * 1000
+                                // chapter_number = it.sort.toFloat()
+                                scanlator = category.key
+                                memo = buildJsonObject { put("size", it.count) }
+                            }
+                        }.reversed()
+                }
             }
-        }
 
         return SMangaUpdate(sManga, sChapters)
     }

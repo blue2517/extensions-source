@@ -11,7 +11,9 @@ const val LISTING_PAGE_SIZE = 20
 val DATE_FORMAT = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ENGLISH)
 
 @Serializable
-class LoginResponseDto(val status: String)
+class LoginResponseDto(
+    val status: String,
+)
 
 fun String.formatAuthors() = split(" ").joinToString { name ->
     name.split("-").joinToString(" ") { word -> word.replaceFirstChar { it.uppercaseChar() } }
@@ -32,7 +34,10 @@ class MangaDetailDto(
 )
 
 @Serializable
-class CategoryDto(val id: Int, val name: String)
+class CategoryDto(
+    val id: Int,
+    val name: String,
+)
 
 @Serializable
 class ChapterDto(
