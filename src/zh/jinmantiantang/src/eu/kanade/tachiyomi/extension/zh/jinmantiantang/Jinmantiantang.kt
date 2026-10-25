@@ -53,7 +53,6 @@ import kotlin.time.Duration.Companion.seconds
 abstract class Jinmantiantang :
     KeiSource(),
     ConfigurableSource {
-
     // 首次加载时迁移旧版镜像列表
     private val preferences = getPreferences { preferenceMigration() }
 
@@ -142,7 +141,11 @@ abstract class Jinmantiantang :
         }
     }
 
-    override suspend fun getSearchMangaList(page: Int, query: String, filters: FilterList): MangasPage {
+    override suspend fun getSearchMangaList(
+        page: Int,
+        query: String,
+        filters: FilterList,
+    ): MangasPage {
         if (filters.firstInstanceOrNull<FavoritesFilter>()?.isEnabled() == true) {
             return fetchFavorites(page)
         }
@@ -150,9 +153,10 @@ abstract class Jinmantiantang :
         // JM号搜索: JM123 / 123 直接打开对应作品
         if (query.startsWith(PREFIX_ID_SEARCH_NO_COLON, ignoreCase = true) || query.toIntOrNull() != null) {
             val id = query.removePrefix(PREFIX_ID_SEARCH_NO_COLON).removePrefix(":").trim()
-            val manga = mangaDetailsParse(mangaDetailsResolve(client.get("$baseUrl/album/$id"))).apply {
-                url = "/album/$id/"
-            }
+            val manga =
+                mangaDetailsParse(mangaDetailsResolve(client.get("$baseUrl/album/$id"))).apply {
+                    url = "/album/$id/"
+                }
             return MangasPage(listOf(manga), hasNextPage = false)
         }
 
@@ -160,7 +164,11 @@ abstract class Jinmantiantang :
     }
 
     // 禁漫天堂特有搜索方式: A +B --> A and B, A B --> A or B
-    private fun searchUrl(page: Int, query: String, filters: FilterList): HttpUrl {
+    private fun searchUrl(
+        page: Int,
+        query: String,
+        filters: FilterList,
+    ): HttpUrl {
         val params = filters.filterIsInstance<UriPartFilter>().joinToString("") { it.toUriPart() }
 
         if (query.isNotEmpty() && !query.contains("-")) {
@@ -184,18 +192,23 @@ abstract class Jinmantiantang :
         }
     }
 
-    private fun buildUrl(pathAndQuery: String, extra: Map<String, String>): HttpUrl {
+    private fun buildUrl(
+        pathAndQuery: String,
+        extra: Map<String, String>,
+    ): HttpUrl {
         val path = pathAndQuery.substringBefore("?")
 
-        return "$baseUrl$path".toHttpUrl().newBuilder()
+        return "$baseUrl$path"
+            .toHttpUrl()
+            .newBuilder()
             .apply {
-                pathAndQuery.substringAfter("?", "")
+                pathAndQuery
+                    .substringAfter("?", "")
                     .split("&")
                     .filter { "=" in it }
                     .forEach { addQueryParameter(it.substringBefore("="), it.substringAfter("=")) }
                 extra.forEach { (key, value) -> addQueryParameter(key, value) }
-            }
-            .build()
+            }.build()
     }
 
     override suspend fun getMangaByUrl(url: HttpUrl): SManga? {
@@ -232,11 +245,12 @@ abstract class Jinmantiantang :
                 val img = element.selectFirst("img") ?: return@forEach
                 val src = img.attr("src")
                 val dataCfsrc = img.attr("data-cfsrc")
-                val imageUrl = if (src.contains("blank.jpg") || dataCfsrc.contains("blank.jpg")) {
-                    img.attr("data-original").substringBefore("?")
-                } else {
-                    src.substringBefore("?")
-                }
+                val imageUrl =
+                    if (src.contains("blank.jpg") || dataCfsrc.contains("blank.jpg")) {
+                        img.attr("data-original").substringBefore("?")
+                    } else {
+                        src.substringBefore("?")
+                    }
                 pages.add(Page(pages.size, imageUrl = imageUrl))
             }
 
@@ -249,13 +263,14 @@ abstract class Jinmantiantang :
 
     // 收藏夹
     private suspend fun fetchFavorites(page: Int): MangasPage {
-        val username = getUsername().ifBlank {
-            detectUsername().also { detected ->
-                if (detected.isNotBlank()) {
-                    preferences.edit().putString(USERNAME_PREF, detected).apply()
+        val username =
+            getUsername().ifBlank {
+                detectUsername().also { detected ->
+                    if (detected.isNotBlank()) {
+                        preferences.edit().putString(USERNAME_PREF, detected).apply()
+                    }
                 }
             }
-        }
 
         if (username.isBlank()) {
             throw Exception("未检测到登录状态：请在应用内置浏览器中打开网页并登录，或在插件设置中手动填写用户名")
@@ -291,7 +306,8 @@ abstract class Jinmantiantang :
 
     private suspend fun detectUsername(): String {
         val nav = client.get(baseUrl).asJsoup().selectFirst("#Comic_Top_Nav") ?: return ""
-        return nav.select("a[href*='favorite']")
+        return nav
+            .select("a[href*='favorite']")
             .map { it.attr("href").substringAfter("/user/", "").substringBefore("/") }
             .firstOrNull { it.isNotBlank() }
             .orEmpty()
@@ -341,7 +357,11 @@ abstract class Jinmantiantang :
         // When the index passed by the "selectDetailsStatusAndGenre(document: Document, index: Int)" index is 1,
         // it will definitely return a String type of 0, 1 or 2. This warning can be ignored
         status = selectDetailsStatusAndGenre(document, 1).trim().toIntOrNull() ?: 0
-        description = document.selectFirst("#intro-block .p-t-5.p-b-5")?.text()?.substringAfter("敘述：")?.trim() ?: ""
+        description = document
+            .selectFirst("#intro-block .p-t-5.p-b-5")
+            ?.text()
+            ?.substringAfter("敘述：")
+            ?.trim() ?: ""
     }
 
     override fun getMangaUrl(manga: SManga) = "$baseUrl${manga.url}"
@@ -365,7 +385,10 @@ abstract class Jinmantiantang :
     }
 
     // 查询漫画状态和类别信息
-    private fun selectDetailsStatusAndGenre(document: Document, index: Int): String {
+    private fun selectDetailsStatusAndGenre(
+        document: Document,
+        index: Int,
+    ): String {
         var status = "0"
         var genre = ""
         val spanGenres = document.select("span[itemprop=genre] a")
@@ -398,11 +421,12 @@ abstract class Jinmantiantang :
             if (singleUrl.isNullOrBlank()) {
                 blockInvalidData(document)
             }
-            val singleChapter = SChapter.create().apply {
-                name = "单章节"
-                url = singleUrl
-                date_upload = dateFormat.tryParse(document.select("[itemprop=datePublished]").last()?.attr("content"))
-            }
+            val singleChapter =
+                SChapter.create().apply {
+                    name = "单章节"
+                    url = singleUrl
+                    date_upload = dateFormat.tryParse(document.select("[itemprop=datePublished]").last()?.attr("content"))
+                }
             return listOf(singleChapter)
         }
         return elements.map { chapterFromElement(it) }.reversed()
@@ -444,16 +468,24 @@ abstract class Jinmantiantang :
             throw Exception("登录已过期，请重新在应用内置浏览器中登录")
         }
 
-        val dailyId = homepage.selectFirst("#bouns-popup")?.attr("data-dailyid")
-            ?: throw Exception("未找到签到入口")
+        val dailyId =
+            homepage.selectFirst("#bouns-popup")?.attr("data-dailyid")
+                ?: throw Exception("未找到签到入口")
 
         val eventJson = client.get("$baseUrl/ajax/user_daily_event?daily_id=$dailyId").body.string()
-        val oldStep = Regex("\"oldStep\":(\\d+)").find(eventJson)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        val oldStep =
+            Regex("\"oldStep\":(\\d+)")
+                .find(eventJson)
+                ?.groupValues
+                ?.get(1)
+                ?.toIntOrNull() ?: 0
 
-        val body = FormBody.Builder()
-            .add("daily_id", dailyId)
-            .add("oldStep", (oldStep + 1).toString())
-            .build()
+        val body =
+            FormBody
+                .Builder()
+                .add("daily_id", dailyId)
+                .add("oldStep", (oldStep + 1).toString())
+                .build()
 
         val signJson = client.post("$baseUrl/ajax/user_daily_sign", body = body).body.string()
 
@@ -468,7 +500,10 @@ abstract class Jinmantiantang :
         throw Exception(msg ?: "签到失败，请检查是否已登录")
     }
 
-    private fun extractJsonString(json: String, field: String): String? {
+    private fun extractJsonString(
+        json: String,
+        field: String,
+    ): String? {
         val match = Regex("\"$field\":\"((?:\\\\.|[^\"\\\\])*)\"").find(json) ?: return null
         return unescapeJson(match.groupValues[1])
     }
@@ -534,62 +569,66 @@ abstract class Jinmantiantang :
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         val context = screen.context
 
-        EditTextPreference(context).apply {
-            key = USERNAME_PREF
-            title = "用户名（登录账号 / 收藏夹）"
-            summary = "填写用户名并设置密码后，插件会自动登录，无需再打开内置浏览器手动登录。\n" +
-                "只在网页登录的用户可不填密码：用户名留空时插件会自动识别登录状态用于收藏夹；识别失败请在此手动填写（顶栏账号即用户名）。"
-            setDefaultValue("")
-            // 修改账号时清除会话 cookie，让新凭据立即生效
-            setOnPreferenceChangeListener { _, _ ->
-                clearSessionCookies(baseUrl)
-                true
-            }
-        }.let(screen::addPreference)
+        EditTextPreference(context)
+            .apply {
+                key = USERNAME_PREF
+                title = "用户名（登录账号 / 收藏夹）"
+                summary = "填写用户名并设置密码后，插件会自动登录，无需再打开内置浏览器手动登录。\n" +
+                    "只在网页登录的用户可不填密码：用户名留空时插件会自动识别登录状态用于收藏夹；识别失败请在此手动填写（顶栏账号即用户名）。"
+                setDefaultValue("")
+                // 修改账号时清除会话 cookie，让新凭据立即生效
+                setOnPreferenceChangeListener { _, _ ->
+                    clearSessionCookies(baseUrl)
+                    true
+                }
+            }.let(screen::addPreference)
 
         // 密码设置项（与用户名一起构成自动登录凭据）
-        EditTextPreference(context).apply {
-            key = PASSWORD_PREF
-            title = "密码"
-            summary = if (preferences.getString(key, "").isNullOrEmpty()) "未设置，部分漫画需要登录才能观看" else "已设置"
-            dialogTitle = title
-            setOnBindEditTextListener {
-                it.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            }
-            setOnPreferenceChangeListener { pref, newValue ->
-                (pref as EditTextPreference).summary =
-                    if ((newValue as String).isEmpty()) "未设置，部分漫画需要登录才能观看" else "已设置"
-                clearSessionCookies(baseUrl)
-                true
-            }
-        }.let(screen::addPreference)
-
-        SwitchPreferenceCompat(context).apply {
-            key = CHECKIN_PREF
-            title = "自动签到"
-            summary = "每次打开本图源时自动进行每日签到"
-            setDefaultValue(false)
-        }.let(screen::addPreference)
-
-        SwitchPreferenceCompat(context).apply {
-            title = "立即签到"
-            summary = "点击立即签到一次"
-            setOnPreferenceChangeListener { _, _ ->
-                @OptIn(DelicateCoroutinesApi::class)
-                GlobalScope.launch(Dispatchers.IO) {
-                    try {
-                        val msg = performCheckIn()
-                        preferences.edit().putString(CHECKIN_DATE_PREF, today()).apply()
-                        showToast("签到成功：$msg")
-                    } catch (_: AlreadyCheckedInException) {
-                        showToast("今日已签到")
-                    } catch (e: Exception) {
-                        showToast("签到失败：${e.message}")
-                    }
+        EditTextPreference(context)
+            .apply {
+                key = PASSWORD_PREF
+                title = "密码"
+                summary = if (preferences.getString(key, "").isNullOrEmpty()) "未设置，部分漫画需要登录才能观看" else "已设置"
+                dialogTitle = title
+                setOnBindEditTextListener {
+                    it.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
                 }
-                false
-            }
-        }.let(screen::addPreference)
+                setOnPreferenceChangeListener { pref, newValue ->
+                    (pref as EditTextPreference).summary =
+                        if ((newValue as String).isEmpty()) "未设置，部分漫画需要登录才能观看" else "已设置"
+                    clearSessionCookies(baseUrl)
+                    true
+                }
+            }.let(screen::addPreference)
+
+        SwitchPreferenceCompat(context)
+            .apply {
+                key = CHECKIN_PREF
+                title = "自动签到"
+                summary = "每次打开本图源时自动进行每日签到"
+                setDefaultValue(false)
+            }.let(screen::addPreference)
+
+        SwitchPreferenceCompat(context)
+            .apply {
+                title = "立即签到"
+                summary = "点击立即签到一次"
+                setOnPreferenceChangeListener { _, _ ->
+                    @OptIn(DelicateCoroutinesApi::class)
+                    GlobalScope.launch(Dispatchers.IO) {
+                        try {
+                            val msg = performCheckIn()
+                            preferences.edit().putString(CHECKIN_DATE_PREF, today()).apply()
+                            showToast("签到成功：$msg")
+                        } catch (_: AlreadyCheckedInException) {
+                            showToast("今日已签到")
+                        } catch (e: Exception) {
+                            showToast("签到失败：${e.message}")
+                        }
+                    }
+                    false
+                }
+            }.let(screen::addPreference)
 
         // 含"使用镜像网址"设置项
         getPreferenceList(context, preferences, updateUrlInterceptor.isUpdated).forEach(screen::addPreference)

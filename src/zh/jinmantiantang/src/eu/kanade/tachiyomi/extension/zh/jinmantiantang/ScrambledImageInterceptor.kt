@@ -29,7 +29,10 @@ object ScrambledImageInterceptor : Interceptor {
         // GIF 未经站点分割加密：peek 3 字节嗅探 "GIF" 魔数，命中则原响应直接透传
         // （不读整张图进内存，保留动画）。
         val head = Buffer()
-        response.body.source().peek().read(head, 3)
+        response.body
+            .source()
+            .peek()
+            .read(head, 3)
         if (head.size == 3L &&
             head[0] == 'G'.code.toByte() &&
             head[1] == 'I'.code.toByte() &&
@@ -40,29 +43,32 @@ object ScrambledImageInterceptor : Interceptor {
 
         val responseBuilder = response.newBuilder()
         val imgIndex: String = pathSegments.last().substringBefore('.')
-        val input = if ("gzip" == response.header("Content-Encoding")) {
-            responseBuilder.headers(
-                response.headers.newBuilder()
-                    .removeAll("Content-Encoding")
-                    .removeAll("Content-Length")
-                    .build(),
-            )
-            GZIPInputStream(response.body.byteStream())
-        } else {
-            response.body.byteStream()
-        }
+        val input =
+            if ("gzip" == response.header("Content-Encoding")) {
+                responseBuilder.headers(
+                    response.headers
+                        .newBuilder()
+                        .removeAll("Content-Encoding")
+                        .removeAll("Content-Length")
+                        .build(),
+                )
+                GZIPInputStream(response.body.byteStream())
+            } else {
+                response.body.byteStream()
+            }
 
         // gzip 压缩过的 GIF：解压后字节原样透传（保留动画）；非 GIF 才走切片还原。
         val bytes = input.use { it.readBytes() }
         val isGif = bytes.size >= 3 && bytes[0] == 'G'.code.toByte() && bytes[1] == 'I'.code.toByte() && bytes[2] == 'F'.code.toByte()
 
-        val (buffer, mediaType) = if (isGif) {
-            val buf = Buffer()
-            buf.write(bytes)
-            Pair(buf, gifMediaType)
-        } else {
-            Pair(decodeImage(ByteArrayInputStream(bytes), getRows(aid, imgIndex)), jpegMediaType)
-        }
+        val (buffer, mediaType) =
+            if (isGif) {
+                val buf = Buffer()
+                buf.write(bytes)
+                Pair(buf, gifMediaType)
+            } else {
+                Pair(decodeImage(ByteArrayInputStream(bytes), getRows(aid, imgIndex)), jpegMediaType)
+            }
 
         return responseBuilder.body(buffer.asResponseBody(mediaType)).build()
     }
@@ -77,17 +83,24 @@ object ScrambledImageInterceptor : Interceptor {
         return lastByte.toString(16).last().code
     }
 
-    private fun getRows(aid: Int, imgIndex: String): Int {
-        val modulus = when {
-            aid >= 421926 -> 8
-            aid >= 268850 -> 10
-            else -> return 10
-        }
+    private fun getRows(
+        aid: Int,
+        imgIndex: String,
+    ): Int {
+        val modulus =
+            when {
+                aid >= 421926 -> 8
+                aid >= 268850 -> 10
+                else -> return 10
+            }
         return 2 * (md5LastCharCode(aid.toString() + imgIndex) % modulus) + 2
     }
 
     // 对被分割的图片进行分割,排序处理
-    private fun decodeImage(img: InputStream, rows: Int): Buffer {
+    private fun decodeImage(
+        img: InputStream,
+        rows: Int,
+    ): Buffer {
         // 使用bitmap进行图片处理
         val input = BitmapFactory.decodeStream(img)
         // 漫画高度 and width

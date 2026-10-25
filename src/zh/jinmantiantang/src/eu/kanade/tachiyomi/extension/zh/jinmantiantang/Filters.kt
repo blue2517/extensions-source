@@ -18,10 +18,8 @@ internal class CategoryGroup :
             Pair("汉化", "/albums/doujin/sub/chinese?"),
             Pair("Cosplay", "/albums/doujin/sub/cosplay?"),
             Pair("CG图集", "/albums/doujin/sub/CG?"),
-
             Pair("P站", "/search/photos?search_query=PIXIV&"),
             Pair("3D", "/search/photos?search_query=3D&"),
-
             Pair("剧情", "/search/photos?search_query=劇情&"),
             Pair("校园", "/search/photos?search_query=校園&"),
             Pair("纯爱", "/search/photos?search_query=純愛&"),
@@ -37,7 +35,6 @@ internal class CategoryGroup :
             Pair("痴女", "/search/photos?search_query=癡女&"),
             Pair("全彩", "/search/photos?search_query=全彩&"),
             Pair("女性向", "/search/photos?search_query=女性向&"),
-
             Pair("萝莉", "/search/photos?search_query=蘿莉&"),
             Pair("御姐", "/search/photos?search_query=御姐&"),
             Pair("熟女", "/search/photos?search_query=熟女&"),
@@ -54,7 +51,6 @@ internal class CategoryGroup :
             Pair("连裤袜", "/search/photos?search_query=連褲襪&"),
             Pair("制服", "/search/photos?search_query=制服&"),
             Pair("兔女郎", "/search/photos?search_query=兔女郎&"),
-
             Pair("群交", "/search/photos?search_query=群交&"),
             Pair("足交", "/search/photos?search_query=足交&"),
             Pair("SM", "/search/photos?search_query=SM&"),
@@ -71,7 +67,6 @@ internal class CategoryGroup :
             Pair("兽交", "/search/photos?search_query=獸交&"),
             Pair("亚人", "/search/photos?search_query=亞人&"),
             Pair("魔物", "/search/photos?search_query=魔物&"),
-
             Pair("CG集", "/search/photos?search_query=CG集&"),
             Pair("重口", "/search/photos?search_query=重口&"),
             Pair("猎奇", "/search/photos?search_query=獵奇&"),
@@ -124,8 +119,9 @@ internal class FavoritesFilter : Filter.Select<String>("收藏夹", arrayOf("关
  *创建选择过滤器的类。 下拉菜单中的每个条目都有一个名称和一个显示名称。
  *如果选择了一个条目，它将作为查询参数附加到URI的末尾。
  *如果将firstIsUnspecified设置为true，则如果选择了第一个条目，则URI不会附加任何内容。
+ *
+ * vals: <name, display>
  */
-// vals: <name, display>
 internal open class UriPartFilter(
     displayName: String,
     val vals: Array<Pair<String, String>>,

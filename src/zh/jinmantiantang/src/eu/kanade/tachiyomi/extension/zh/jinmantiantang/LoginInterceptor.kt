@@ -21,7 +21,6 @@ internal class LoginInterceptor(
     private val baseUrlProvider: () -> String,
     private val headersProvider: () -> Headers,
 ) : Interceptor {
-
     private val loginLock = Any()
 
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -47,18 +46,22 @@ internal class LoginInterceptor(
         val username = preferences.getString(USERNAME_PREF, null)!!.trim()
         val password = preferences.getString(PASSWORD_PREF, null)!!
 
-        val form = FormBody.Builder()
-            .add("username", username)
-            .add("password", password)
-            .add("id_remember", "on")
-            .add("login_remember", "on")
-            .add("submit_login", "")
-            .build()
+        val form =
+            FormBody
+                .Builder()
+                .add("username", username)
+                .add("password", password)
+                .add("id_remember", "on")
+                .add("login_remember", "on")
+                .add("submit_login", "")
+                .build()
 
-        val loginHeaders = headersProvider().newBuilder()
-            .set("Origin", baseUrl)
-            .set("Referer", "$baseUrl/login")
-            .build()
+        val loginHeaders =
+            headersProvider()
+                .newBuilder()
+                .set("Origin", baseUrl)
+                .set("Referer", "$baseUrl/login")
+                .build()
 
         try {
             baseClient.newCall(POST("$baseUrl/login", loginHeaders, form)).execute().use { response ->
