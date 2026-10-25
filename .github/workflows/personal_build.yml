@@ -6,6 +6,7 @@ on:
       - DIY
     paths:
       - 'src/zh/jinmantiantang/**'
+      - 'src/zh/noyacg/**'
       - 'core/**'
       - 'compiler/**'
       - 'common/**'
