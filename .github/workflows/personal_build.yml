@@ -80,7 +80,7 @@ jobs:
       - name: Install the required Android SDK platform
         env:
           COMPILE_SDK: ${{ steps.sources.outputs.compile_sdk }}
-        run: sdkmanager "platforms;android-${COMPILE_SDK}"
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-${COMPILE_SDK}"'
 
       - name: Lint and run source unit tests
         env:
