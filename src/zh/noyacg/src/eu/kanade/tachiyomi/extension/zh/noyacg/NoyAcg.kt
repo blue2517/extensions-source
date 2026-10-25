@@ -135,7 +135,9 @@ abstract class NoyAcg :
 
     override suspend fun getPopularManga(page: Int): MangasPage {
         val type = pref.getString(POPULAR_MANGAS_PREF, "day")!!
-        val body = FormBody.Builder().addEncoded("type", type).addEncoded("page", page.toString())
+        // Preserve existing preferences while using the API's spelling for the monthly ranking.
+        val apiType = if (type == "month") "moon" else type
+        val body = FormBody.Builder().addEncoded("type", apiType).addEncoded("page", page.toString())
         val response = client.post("$baseUrl/api/readLeaderboard", body.build())
         return mangaPageParse(response, page)
     }
