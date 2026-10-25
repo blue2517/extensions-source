@@ -38,3 +38,8 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.core)
 }
+
+// Helper tests do not declare another @Source entry point for the source processor.
+tasks.matching { it.name.startsWith("ksp") && it.name.endsWith("UnitTestKotlin") }.configureEach {
+    enabled = false
+}
