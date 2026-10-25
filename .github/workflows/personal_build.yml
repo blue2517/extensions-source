@@ -77,10 +77,13 @@ jobs:
         with:
           cache-read-only: false
 
-      - name: Install the required Android SDK platform
+      - name: Check the hosted Android SDK platform
         env:
           COMPILE_SDK: ${{ steps.sources.outputs.compile_sdk }}
-        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-${COMPILE_SDK}"'
+        run: |
+          ls -1 "$ANDROID_HOME/platforms"
+          test -f "$ANDROID_HOME/platforms/android-${COMPILE_SDK}/android.jar" || \
+            test -f "$ANDROID_HOME/platforms/android-${COMPILE_SDK}.0/android.jar"
 
       - name: Lint and run source unit tests
         env:
