@@ -29,7 +29,12 @@ import keiyoushi.utils.tryParse
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.JsonElement
 import okhttp3.FormBody
 import okhttp3.HttpUrl
@@ -57,6 +62,9 @@ abstract class Jinmantiantang :
         get() = "https://" + preferences.mirrorBaseUrl
 
     private val updateUrlInterceptor = UpdateUrlInterceptor(preferences)
+    private val genreFilter = GenreFilter()
+    private val genreFilterPermits = Semaphore(3)
+    private val filteredPages = FilteredPageLoader<SManga>()
 
     override fun OkHttpClient.Builder.configureClient() = apply {
         // 拦截器放最前：主站请求失败时自动拉取新镜像列表
@@ -71,26 +79,51 @@ abstract class Jinmantiantang :
     // 点击量排序(人气)
     override suspend fun getPopularManga(page: Int): MangasPage {
         maybeAutoCheckIn()
-        return mangaListParse(client.get("$baseUrl/albums?o=mv&page=$page"))
+        return fetchMangaList("$baseUrl/albums?o=mv&page=$page".toHttpUrl())
     }
 
     // 最新排序
-    override suspend fun getLatestUpdates(page: Int): MangasPage = mangaListParse(client.get("$baseUrl/albums?o=mr&page=$page"))
+    override suspend fun getLatestUpdates(page: Int): MangasPage = fetchMangaList("$baseUrl/albums?o=mr&page=$page".toHttpUrl())
 
-    private fun mangaListParse(response: Response): MangasPage {
-        val document = response.asJsoup()
-        val mangas = document.select("div.list-col > div.p-b-15:not([data-group])")
-            .map { popularMangaFromElement(it) }
-            .filterGenre()
-        val hasNextPage = document.selectFirst("a.prevnext") != null
-        return MangasPage(mangas, hasNextPage)
+    private suspend fun fetchMangaList(url: HttpUrl): MangasPage {
+        val blockedGenres = preferences.blockList.toSet()
+        val listing =
+            url
+                .newBuilder()
+                .removeAllQueryParameters("page")
+                .build()
+                .toString()
+        val result =
+            filteredPages.load(listing, blockedGenres, url.queryParameter("page")!!.toInt()) { page ->
+                val pageUrl = url.newBuilder().setQueryParameter("page", page.toString()).build()
+                val document = client.get(pageUrl).asJsoup()
+                val mangas =
+                    document
+                        .select("div.list-col > div.p-b-15:not([data-group])")
+                        .map { popularMangaFromElement(it) }
+                        .filterGenre(blockedGenres)
+                FilteredPageLoader.Page(mangas, document.selectFirst("a.prevnext") != null)
+            }
+        return MangasPage(result.items, result.hasNextPage)
     }
 
-    private fun List<SManga>.filterGenre(): List<SManga> {
-        val removedGenres = preferences.blockList
-        if (removedGenres.all { it.isBlank() }) return this
-        return this.filterNot { manga ->
-            manga.genre.orEmpty().lowercase().split(", ").any { it in removedGenres }
+    private suspend fun List<SManga>.filterGenre(blockedGenres: Set<String>): List<SManga> {
+        if (blockedGenres.isEmpty()) return this
+        return coroutineScope {
+            map { manga ->
+                async {
+                    val blocked =
+                        genreFilterPermits.withPermit {
+                            genreFilter.isBlocked(getMangaUrl(manga), manga.genre, blockedGenres) {
+                                // Listing cards omit tags that are present on the detail page.
+                                val document = mangaDetailsResolve(client.get(getMangaUrl(manga)))
+                                val genres = document.selectFirst("span[itemprop=genre]") ?: blockInvalidData(document)
+                                genres.select("a").map { it.text() }
+                            }
+                        }
+                    manga.takeUnless { blocked }
+                }
+            }.awaitAll().filterNotNull()
         }
     }
 
@@ -123,7 +156,7 @@ abstract class Jinmantiantang :
             return MangasPage(listOf(manga), hasNextPage = false)
         }
 
-        return mangaListParse(client.get(searchUrl(page, query, filters)))
+        return fetchMangaList(searchUrl(page, query, filters))
     }
 
     // 禁漫天堂特有搜索方式: A +B --> A and B, A B --> A or B

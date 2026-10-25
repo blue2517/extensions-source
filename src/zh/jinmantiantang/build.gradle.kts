@@ -6,7 +6,7 @@ plugins {
 
 keiyoushi {
     name = "Jinman Tiantang"
-    versionCode = 60
+    versionCode = 61
     contentWarning = ContentWarning.NSFW
     libVersion = "1.6"
 
@@ -23,4 +23,18 @@ keiyoushi {
         host("jmcomic-zzz.org")
         path("/album/..*")
     }
+}
+
+android {
+    sourceSets {
+        named("test") {
+            java.directories.add("test")
+            kotlin.directories.add("test")
+        }
+    }
+}
+
+dependencies {
+    testImplementation(libs.junit)
+    testImplementation(libs.coroutines.core)
 }

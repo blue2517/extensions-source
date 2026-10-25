@@ -33,6 +33,7 @@ internal fun getPreferenceList(
     EditTextPreference(context).apply {
         key = BLOCK_PREF
         title = "屏蔽词列表"
+        summary = "按完整标签匹配；启用后会补取详情标签，首次加载较慢，结果缓存 10 分钟。修改后请重新加载列表。"
         setDefaultValue(
             "// 例如 \"YAOI cos 扶他 毛絨絨 獵奇 韩漫 韓漫\", " +
                 "关键词之间用空格分离, 大小写不敏感, \"//\"后的字符会被忽略",
@@ -70,7 +71,7 @@ internal fun clearSessionCookies(baseUrl: String) {
 }
 
 internal val SharedPreferences.blockList: List<String>
-    get() = getString(BLOCK_PREF, "")!!.substringBefore("//").trim().lowercase().split(' ')
+    get() = parseBlockedGenres(getString(BLOCK_PREF, "").orEmpty())
 
 private const val USE_MIRROR_URL_PREF = "useMirrorWebsitePreference"
 
