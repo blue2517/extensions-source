@@ -20,12 +20,6 @@ class ServerListDto(
 )
 
 @Serializable
-class AlbumListDto(
-    val content: List<AlbumItemDto> = emptyList(),
-    @SerialName("redirect_aid") val redirectAid: Int? = null,
-)
-
-@Serializable
 class FavoriteListDto(
     val list: List<AlbumItemDto>,
     val total: String,
@@ -169,41 +163,15 @@ class MessageDto(
 )
 
 @Serializable
-class CategoriesDto(
-    val categories: List<CategoryGroupDto>,
-    val blocks: List<TagBlockDto>,
-)
-
-@Serializable
-class CategoryGroupDto(
-    val name: String,
-    val slug: String = "",
-    @SerialName("sub_categories") val subCategories: List<SubCategoryDto>? = null,
-)
-
-@Serializable
-class SubCategoryDto(
-    val name: String,
-    val slug: String,
-)
-
-@Serializable
 class FilterData(
-    val categories: List<Pair<String, String>>,
     val tagGroups: List<Pair<String, List<String>>>,
-)
-
-@Serializable
-class TagBlockDto(
-    val title: String,
-    val content: List<String>,
 )
 
 private val ONGOING = listOf("连载中", "连载")
 private const val COMPLETED = "完结"
 
-private fun albumPath(id: String) = "/album/$id/"
+internal fun albumPath(id: String) = "/album/$id/"
 
 private fun chapterPath(id: String) = "/photo/$id"
 
-private fun coverUrl(coverHost: String, id: String) = "$coverHost/media/albums/${id}_3x4.jpg"
+internal fun coverUrl(coverHost: String, id: String) = "$coverHost/media/albums/${id}_3x4.jpg"

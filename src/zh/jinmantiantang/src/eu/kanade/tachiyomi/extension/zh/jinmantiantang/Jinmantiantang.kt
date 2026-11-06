@@ -26,6 +26,7 @@ import keiyoushi.source.KeiSource
 import keiyoushi.utils.aesDecrypt
 import keiyoushi.utils.aesEcb
 import keiyoushi.utils.applicationContext
+import keiyoushi.utils.asJsoup
 import keiyoushi.utils.firstInstance
 import keiyoushi.utils.firstInstanceOrNull
 import keiyoushi.utils.getPreferences
@@ -51,6 +52,7 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody
 import okhttp3.Response
+import org.jsoup.nodes.Element
 import java.io.IOException
 import java.time.LocalDate
 import kotlin.time.Clock
@@ -67,7 +69,7 @@ abstract class Jinmantiantang :
     override fun OkHttpClient.Builder.configureClient() = apply {
         addInterceptor(ScrambledImageInterceptor)
         addInterceptor(::dropFailedApiHost)
-        rateLimit(3, 2.seconds) { it.host == apiHost }
+        rateLimit(3, 2.seconds) { it.host == apiHost || it.host == baseUrl.toHttpUrl().host }
     }
 
     override suspend fun getPopularManga(page: Int): MangasPage {
@@ -76,15 +78,34 @@ abstract class Jinmantiantang :
             preferences.edit().putString(CHECKIN_DATE_PREF, today()).apply()
             checkIn(showError = false)
         }
-        return albumList(apiUrl("categories/filter", "page" to "$page", "c" to "0", "o" to "mv"))
+        return albumList(albumsUrl("mv", page))
     }
 
-    override suspend fun getLatestUpdates(page: Int): MangasPage = albumList(apiUrl("categories/filter", "page" to "$page", "c" to "0", "o" to "mr"))
+    override suspend fun getLatestUpdates(page: Int): MangasPage = albumList(albumsUrl("mr", page))
+
+    private fun albumsUrl(order: String, page: Int): HttpUrl = baseUrl.toHttpUrl().newBuilder()
+        .addPathSegment("albums")
+        .addQueryParameter("o", order)
+        .addQueryParameter("page", page.toString())
+        .build()
 
     private suspend fun albumList(url: HttpUrl): MangasPage {
-        val list = apiGet<AlbumListDto>(url)
-        val mangas = list.content.map { it.toSManga(coverHost) }.filterGenre()
-        return MangasPage(mangas, list.content.size >= PAGE_SIZE)
+        // The API's list items only have categories; the website's cards include the tags needed for blocking.
+        val document = client.get(url, Fetch.DOCUMENT).asJsoup()
+        val mangas = document.select("div.list-col > div.p-b-15:not([data-group])")
+            .map(::mangaFromElement)
+            .filterGenre()
+        val nextPage = document.selectFirst("a.prevnext")?.absUrl("href")?.toHttpUrl()?.queryParameter("page")?.toInt()
+        return MangasPage(mangas, nextPage != null && nextPage > url.queryParameter("page")!!.toInt())
+    }
+
+    private fun mangaFromElement(element: Element): SManga = SManga.create().apply {
+        val id = element.selectFirst("a[href*='/album/']")!!.absUrl("href").toHttpUrl().pathSegments[1]
+        url = albumPath(id)
+        title = element.selectFirst(".video-title")!!.text()
+        author = element.select("div.title-truncate:not(.tags) a").joinToString { it.text() }.ifEmpty { null }
+        genre = element.select(".tags a.tag").joinToString { it.text() }.ifEmpty { null }
+        thumbnail_url = coverUrl(coverHost, id)
     }
 
     // The site's own image CDN: its cover urls stay the same, unlike the API's rotating image hosts
@@ -110,28 +131,27 @@ abstract class Jinmantiantang :
             return MangasPage(listOfNotNull(fetchAlbum(id)), hasNextPage = false)
         }
 
-        // The API's search: "A +B" is A and B, "A B" is A or B, "-A" leaves out A
+        return albumList(searchUrl(page, query, filters))
+    }
+
+    // The site's search: "A +B" is A and B, "A B" is A or B, "-A" leaves out A
+    private fun searchUrl(page: Int, query: String, filters: FilterList): HttpUrl {
         val keywords = listOfNotNull(query.takeIf { it.isNotBlank() }) +
             filters.filterIsInstance<TagFilter>().map { it.value }.filter { it.isNotEmpty() }
-        val sort = filters.firstInstance<SortFilter>().value
 
-        if (keywords.isEmpty()) {
-            val time = filters.firstInstance<TimeFilter>().value
-            val order = if (sort == "mv" && time.isNotEmpty()) "mv_$time" else sort
-            val category = filters.firstInstanceOrNull<CategoryFilter>()?.value ?: "0"
-            return albumList(apiUrl("categories/filter", "page" to "$page", "c" to category, "o" to order))
-        }
-
-        val url = apiUrl(
-            "search",
-            "search_query" to keywords.joinToString(" +"),
-            "o" to sort,
-            "search_type" to filters.firstInstance<TypeFilter>().value,
-            "page" to "$page",
-        )
-        val list = apiGet<AlbumListDto>(url)
-        list.redirectAid?.let { return MangasPage(listOfNotNull(fetchAlbum(it.toString())), hasNextPage = false) }
-        return MangasPage(list.content.map { it.toSManga(coverHost) }.filterGenre(), list.content.size >= PAGE_SIZE)
+        return baseUrl.toHttpUrl().newBuilder().apply {
+            if (keywords.isNotEmpty()) {
+                addPathSegments("search/photos")
+                addQueryParameter("search_query", keywords.joinToString(" +"))
+                addQueryParameter("main_tag", filters.firstInstance<TypeFilter>().value)
+            } else {
+                addPathSegment("albums")
+                filters.firstInstance<CategoryFilter>().value.takeIf { it.isNotEmpty() }?.let(::addPathSegments)
+            }
+            addQueryParameter("o", filters.firstInstance<SortFilter>().value)
+            addQueryParameter("t", filters.firstInstance<TimeFilter>().value)
+            addQueryParameter("page", page.toString())
+        }.build()
     }
 
     override suspend fun getMangaByUrl(url: HttpUrl): SManga? {
@@ -191,12 +211,16 @@ abstract class Jinmantiantang :
     override val supportsFilterFetching get() = true
 
     override suspend fun fetchFilterData(): JsonElement {
-        val data = apiGet<CategoriesDto>(apiUrl("categories"))
-        val categories = data.categories.flatMap { group ->
-            val slug = group.slug.ifEmpty { "0" }
-            listOf(group.name to slug) + group.subCategories.orEmpty().map { "${group.name} · ${it.name}" to "${slug}_${it.slug}" }
-        }
-        return FilterData(categories, data.blocks.map { it.title to it.content }).toJsonElement()
+        val tagGroups = client.get("$baseUrl/theme/", Fetch.DOCUMENT).asJsoup()
+            .select("div.row:has(> h4)")
+            .map { row ->
+                row.selectFirst("h4")!!.text() to row.select("a[href*=search_query]")
+                    .map { it.absUrl("href").toHttpUrl().queryParameter("search_query")!! }
+                    .distinct()
+            }
+            .filter { (name, tags) -> name != "熱門成人主題" && tags.isNotEmpty() }
+            .ifEmpty { throw Exception("No tags on the tag page") }
+        return FilterData(tagGroups).toJsonElement()
     }
 
     override fun getFilterList(data: JsonElement?): FilterList {
@@ -205,11 +229,10 @@ abstract class Jinmantiantang :
             buildList {
                 add(FavoritesFilter())
                 add(Filter.Separator())
-                add(Filter.Header("搜索或选择标签时不按类型和时间筛选"))
-                filterData?.let { add(CategoryFilter(it.categories)) }
+                add(Filter.Header("搜索或选择标签时不按类型筛选"))
+                add(CategoryFilter())
                 filterData?.tagGroups?.forEach { (name, tags) -> add(TagFilter(name, tags)) }
                 add(SortFilter())
-                add(Filter.Header("时间只用于最多浏览"))
                 add(TimeFilter())
                 add(TypeFilter())
             },
@@ -408,7 +431,6 @@ abstract class Jinmantiantang :
 
     companion object {
         private const val PREFIX_ID_SEARCH = "JM"
-        private const val PAGE_SIZE = 80
         private const val FAVORITES_PAGE_SIZE = 20
 
         // The mirrors in build.gradle.kts, all deep linked
